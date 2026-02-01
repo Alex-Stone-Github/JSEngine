@@ -19,6 +19,9 @@
 ' silly string thasldfkj allkj ';
 
 // dumb interupt ing commen
+// laksjdf
+
+34 * (5 + 2) + Math.random();
 
 const hi = Math.random();
 const three3hi = 3 * (Math.random() + 1);

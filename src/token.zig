@@ -1,6 +1,17 @@
 const std = @import("std");
 
-pub const Token = union(enum) {
+pub const Token = struct {
+    token: TokenType,
+    start: usize,
+    end: usize,
+
+    pub fn printRepr(self: @This()) void {
+        std.debug.print("[{}:{}]", .{self.start, self.end});
+        self.token.printRepr();
+    }
+};
+
+pub const TokenType = union(enum) {
     Await,
     Break,
     Case,
@@ -60,10 +71,18 @@ pub const Token = union(enum) {
     MMinus,
 
     Modulus,
-    Not,
     Eql,
     DEql,
     TEql,
+
+    And,
+    Or,
+    Not,
+
+    BitAnd,
+    BitOr,
+    BitXor,
+    BitNot,
 
     Label: []const u8,
     StringLiteral: []const u8,
@@ -73,13 +92,13 @@ pub const Token = union(enum) {
     pub fn printRepr(self: @This()) void {
         switch (self) {
             .StringLiteral => |string| std.debug.print("\"{s}\"\n", .{string}),
-            .Label => |label| std.debug.print("#{s}#\n", .{label}),
+            .Label => |label| std.debug.print("Label({s})\n", .{label}),
             else => std.debug.print("{s}\n", .{@tagName(self)}),
         }
     }
 };
 
-const oneHits = std.StaticStringMap(Token).initComptime(.{
+const oneHits = std.StaticStringMap(TokenType).initComptime(.{
 
     .{ "await", .Await},
     .{ "break", .Break},
@@ -141,10 +160,19 @@ const oneHits = std.StaticStringMap(Token).initComptime(.{
     .{ "--", .MMinus},
     
     .{ "%", .Modulus},
-    .{ "!", .Not},
     .{ "=", .Eql},
     .{ "==", .DEql},
     .{ "===", .TEql},
+
+
+    .{ "&&", .And},
+    .{ "||", .Or},
+    .{ "!", .Not},
+
+    .{ "&", .BitAnd},
+    .{ "|", .BitOr},
+    .{ "^", .BitXor},
+    .{ "~", .BitNot},
 });
 fn strLenCmp(_: void, lhs: []const u8, rhs: []const u8) bool {
     return lhs.len > rhs.len;
@@ -156,7 +184,7 @@ fn getLengthSortedOneHits(alloc: std.mem.Allocator) ![]const[]const u8 {
     return unsortedKeys;
 }
 fn isValidAtomChar(char: u8) bool {
-    return std.ascii.isAlphanumeric(char) or char == '_' or char == '.';
+    return std.ascii.isAlphanumeric(char) or char == '_';
 }
 fn isNumberLiteral(characters: []const u8) ?f64 {
     // All Number Characters
@@ -177,7 +205,6 @@ fn isNumberLiteral(characters: []const u8) ?f64 {
 pub const Tokenizer = struct {
     textRef: []const u8,
     index: usize,
-    tokens: std.ArrayList(Token),
 
     const Self = @This();
 
@@ -185,7 +212,6 @@ pub const Tokenizer = struct {
         return Self {
             .textRef = text,
             .index = 0,
-            .tokens = .empty,
         };
     }
     pub fn advance(self: *Self, cChars: usize) void {
@@ -210,14 +236,22 @@ pub const Tokenizer = struct {
             if (err == error.EndOfStream) return err;
         };
 
+        const tokenStartIndex = self.index;
+
         // 2. Test if string (return)
-        if (self.getStringToken()) |st| {return st;}
+        if (self.getStringToken()) |st| {
+            return Token {.token = st, 
+                .start = tokenStartIndex, .end = self.index};
+        }
         else |err| {
             if (err != error.NotAStringToken) return err;
         }
 
         // 3. Test for keywords and symbols
-        if (self.getOneHitToken()) |onehit| {return onehit;}
+        if (self.getOneHitToken()) |onehit| {
+            return Token {.token = onehit, 
+                .start = tokenStartIndex, .end = self.index};
+        }
         else |err| {
             if (err != error.NotAOneHitToken) return err;
         }
@@ -226,14 +260,15 @@ pub const Tokenizer = struct {
         if (self.getAtomToken()) |atom| {
             //TODO: 5. if it is a label (return) else is 
             // number, udnef, null, bool (return number)
-            return atom;
+            return Token {.token = atom, 
+                .start = tokenStartIndex, .end = self.index};
         }
         else |err| {
             if (err != error.NotAAtomToken) return err;
         }
         return error.InvalidSyntax;
     }
-    pub fn getAtomToken(self: *Self) !Token {
+    pub fn getAtomToken(self: *Self) !TokenType {
         // How long can a variable or number actually be
         var fullWindowBuffer: [128]u8 = undefined;
         var currentWindowBuffer: []u8 = &fullWindowBuffer;
@@ -265,9 +300,9 @@ pub const Tokenizer = struct {
         }
         if (window.len == 0) return error.NotAAtomToken;
         self.advance(window.len);
-        return Token { .Label = window };
+        return TokenType { .Label = window };
     }
-    pub fn getOneHitToken(self: *Self) !Token {
+    pub fn getOneHitToken(self: *Self) !TokenType {
         var buffer: [1024 * 4]u8 = undefined;
         var fixedAllocator = 
             std.heap.FixedBufferAllocator.init(&buffer);
@@ -301,7 +336,7 @@ pub const Tokenizer = struct {
         }
         return error.NotAOneHitToken;
     }
-    pub fn getStringToken(self: *Self) !Token {
+    pub fn getStringToken(self: *Self) !TokenType {
         const hdr = self.peekChar(0) orelse return error.EndOfStream;
         const isStrHdr = hdr == '\'' or hdr == '\"';
         if (!isStrHdr) return error.NotAStringToken;
@@ -316,7 +351,7 @@ pub const Tokenizer = struct {
         const strBytes = self.textRef[ptrOff..self.index];
         self.advance(1); // skip end footer of string ' or "
         
-        return Token { .StringLiteral = strBytes };
+        return TokenType { .StringLiteral = strBytes };
     }
     /// Returns error if end of stream is reached
     pub fn skipNonCounted(self: *Self) !void {
