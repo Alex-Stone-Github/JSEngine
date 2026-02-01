@@ -1,5 +1,4 @@
 const std = @import("std");
-const ast = @import("ast.zig");
 const token = @import("token.zig");
 const parse = @import("parse.zig");
 
@@ -30,7 +29,7 @@ pub fn main() !void {
 
     // Chunkify it
     var chunkTree = 
-        try ast.chunkify(alloc, allTokens.items, 0);
+        try parse.chunkify(alloc, allTokens.items, 0);
     defer chunkTree[1].deinit(alloc);
 
 
@@ -40,7 +39,7 @@ pub fn main() !void {
     std.debug.print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$\n", .{});
     std.debug.print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$\n", .{});
 
-    var parser = parse.Parser.init(chunkTree[1].subchunk.items, alloc);
+    var parser = parse.Parser.init(chunkTree[1].Block.items, alloc);
     try parser.parse();
 }
 

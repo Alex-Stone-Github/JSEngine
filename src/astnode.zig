@@ -9,13 +9,13 @@ pub const JSValueType = union(enum) {
     pub fn printRepr(self: @This()) void {
         switch (self) {
             .JSNumber => |number| {
-                std.debug.print("{}\n", .{number});
+                std.debug.print("JSValueType({})\n", .{number});
             },
             .JSBoolean => |boolean| {
-                std.debug.print("{}\n", .{boolean});
+                std.debug.print("JSValueType({})\n", .{boolean});
             },
             .JSString => |string| {
-                std.debug.print("{s}\n", .{string});
+                std.debug.print("JSValueType(\"{s}\")\n", .{string});
             }
         }
     }
@@ -41,10 +41,10 @@ pub const ASTExpression = union(enum) {
                 lit.printRepr();
             },
             .Label => |label| {
-                std.debug.print("{s}\n", .{label});
+                std.debug.print("ASTLabel({s})\n", .{label});
             },
             .Operation => |op| {
-                std.debug.print("Operation: {s}\n", .{op.name});
+                std.debug.print("ASTOperation({s}):\n", .{op.name});
                 for (op.arguments.items) |argument| {
                     for (0..padlevel+levelDepth) |_| std.debug.print(" ", .{});
                     argument.printSubTree(padlevel + levelDepth);
