@@ -12,6 +12,10 @@
  * the more you know
  */
 
+3.3 + the * whatever + (4 - 2);
+
+false;
+
 "strictest mode";
 
 // one more /* comment */ lk
@@ -21,7 +25,7 @@
 // dumb interupt ing commen
 // laksjdf
 
-34 * (5 + 2) + Math.random();
+34 * (5 + 2) + Math.random(sixtynine /*69*/, "69");
 
 const hi = Math.random();
 const three3hi = 3 * (Math.random() + 1);

@@ -2,16 +2,6 @@ const std = @import("std");
 const astnode = @import("astnode.zig");
 const token = @import("token.zig");
 
-const PratOperator = struct {
-    name: []const u8,
-    leftForce: f64,
-    rightForce: f64,
-
-    pub fn printRepr(self: @This()) void {
-        std.debug.print("POperator.({}[{s}]{})\n", 
-            .{self.leftForce, self.name, self.rightForce});
-    }
-};
 
 pub const PratNode = union(enum) {
     const Self = @This();
@@ -19,7 +9,6 @@ pub const PratNode = union(enum) {
     Token: token.Token,
     Block: std.ArrayList(Self),
     Mini: astnode.ASTExpression,
-    Operator: PratOperator,
 
     const levelDepth = 4;
 
@@ -40,10 +29,6 @@ pub const PratNode = union(enum) {
     }
     pub fn printSubTree(self: Self, padlevel: usize) void {
         switch (self) {
-            .Operator => |op| {
-                for (0..padlevel) |_| std.debug.print(" ", .{});
-                op.printRepr();
-            },
             .Token => |t| {
                 for (0..padlevel) |_| std.debug.print(" ", .{});
                 std.debug.print("UToken.", .{});
@@ -117,40 +102,60 @@ pub const Parser = struct {
         };
     }
 
-    pub fn parse(self: *Self) !void {
-        for (0..4) |i| {
-            std.debug.print("Unparsed Expression {}:\n", .{i});
-            const unparsedStatement = self.getUnparsedStatement();
-            for (unparsedStatement) |*chnk| {
-                switch (chnk.*) {
-                    .Token => |utoken| {
-                        switch (utoken.token) {
-                            .Label => |newLabelName| {
-                                const miniTree = PratNode {
-                                    .Mini = astnode.ASTExpression {
-                                        .Label = newLabelName,
-                                    }
-                                };
-                                chnk.* = miniTree;
-                            },
-                            .StringLiteral => |stringLiteral| {
-                                const miniTree = PratNode {
-                                    .Mini = astnode.ASTExpression {
-                                        .Literal = astnode.JSValueType {
-                                            .JSString = stringLiteral,
-                                        },
-                                    }
-                                };
-                                chnk.* = miniTree;
-                            },
-                            else => {},
-                        }
+    pub fn transformStep(chnk: *PratNode) void {
+        switch (chnk.*) {
+            .Token => |utoken| {
+                switch (utoken.token) {
+                    .Label => |newLabelName| {
+                        const miniTree = PratNode {
+                            .Mini = astnode.ASTExpression {
+                                .Label = newLabelName,
+                            }
+                        };
+                        chnk.* = miniTree;
+                    },
+                    .StringLiteral => |stringLiteral| {
+                        const miniTree = PratNode {
+                            .Mini = astnode.ASTExpression {
+                                .Literal = astnode.JSValueType {
+                                    .JSString = stringLiteral,
+                                },
+                            }
+                        };
+                        chnk.* = miniTree;
+                    },
+                    .NumberLiteral => |numLiteral| {
+                        const miniTree = PratNode {
+                            .Mini = astnode.ASTExpression {
+                                .Literal = astnode.JSValueType {
+                                    .JSNumber = numLiteral,
+                                },
+                            }
+                        };
+                        chnk.* = miniTree;
+                    },
+                    .BoolLiteral => |boolLiteral| {
+                        const miniTree = PratNode {
+                            .Mini = astnode.ASTExpression {
+                                .Literal = astnode.JSValueType {
+                                    .JSBoolean = boolLiteral,
+                                },
+                            }
+                        };
+                        chnk.* = miniTree;
+                    },
+                    .Null => {
+                        const miniTree = PratNode {
+                            .Mini = astnode.ASTExpression {
+                                .Literal = .JSNull
+                            }
+                        };
+                        chnk.* = miniTree;
                     },
                     else => {},
                 }
-                chnk.printSubTree(0);
-            }
-            // Why don't we just parse it like an expression right away
+            },
+            else => {},
         }
     }
     pub fn getUnparsedStatement(self: *Self) []PratNode {
@@ -165,5 +170,56 @@ pub const Parser = struct {
             }
             unparsedStatement.len += 1;
         }
+    }
+    pub fn parse(self: *Self) !void {
+        for (0..1) |i| {
+            std.debug.print("Unparsed Expression {}:\n", .{i});
+            const unparsedStatement = self.getUnparsedStatement();
+            for (unparsedStatement) |*chnk| {
+                transformStep(chnk);
+                chnk.printSubTree(0);
+            }
+            // Why don't we just parse it like an expression right away
+            var expressionParser = 
+                try ExpressionParser.init(unparsedStatement, self.alloc);
+            defer expressionParser.deinit();
+        }
+    }
+};
+
+pub const ExpressionParser = struct {
+
+    const Tabletype = std.AutoHashMap(token.TokenType.Tag, u32);
+
+    chunks: []PratNode,
+    alloc: std.mem.Allocator,
+    index: usize,
+    precedence: Tabletype,
+
+    const Self = @This();
+
+    pub fn parse(self: *Self) void {
+        _ = self;
+    }
+
+    fn initPrecedenceTable(self: *Self) !void {
+        try self.precedence.put(.Plus, 20);
+        try self.precedence.put(.Minus, 20);
+        try self.precedence.put(.Star, 40);
+        try self.precedence.put(.Slash, 40);
+    }
+
+    pub fn init(chunks: []PratNode, alloc: std.mem.Allocator) !Self {
+        var self =  Self {
+            .chunks = chunks,
+            .alloc = alloc,
+            .index = 0,
+            .precedence = Tabletype.init(alloc)
+        };
+        try self.initPrecedenceTable();
+        return self;
+    }
+    pub fn deinit(self: *Self) void {
+        self.precedence.deinit();
     }
 };

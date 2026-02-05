@@ -12,6 +12,8 @@ pub const Token = struct {
 };
 
 pub const TokenType = union(enum) {
+    pub const Tag = std.meta.Tag(@This());
+
     Await,
     Break,
     Case,
@@ -88,6 +90,7 @@ pub const TokenType = union(enum) {
     StringLiteral: []const u8,
     NumberLiteral: f64,
     BoolLiteral: bool,
+    Null,
 
     pub fn printRepr(self: @This()) void {
         switch (self) {
@@ -183,9 +186,6 @@ fn getLengthSortedOneHits(alloc: std.mem.Allocator) ![]const[]const u8 {
     std.mem.sort([]const u8, unsortedKeys, {}, strLenCmp);
     return unsortedKeys;
 }
-fn isValidAtomChar(char: u8) bool {
-    return std.ascii.isAlphanumeric(char) or char == '_';
-}
 fn isNumberLiteral(characters: []const u8) ?f64 {
     // All Number Characters
     for (characters) |char| {
@@ -258,8 +258,6 @@ pub const Tokenizer = struct {
 
         // 4. Classify Label 
         if (self.getAtomToken()) |atom| {
-            //TODO: 5. if it is a label (return) else is 
-            // number, udnef, null, bool (return number)
             return Token {.token = atom, 
                 .start = tokenStartIndex, .end = self.index};
         }
@@ -282,25 +280,50 @@ pub const Tokenizer = struct {
             if (currentWindowBuffer.len == fullWindowBuffer.len) return error.AtomTooBig;
             window = self.peekStr(currentWindowBuffer) orelse return error.EndOfStream;
 
-            // Are we still a valid variable
-            var validAtomCharacters = true;
+            // Are we still a valid label
+            // TODO: REVIEW DOUBLE LOOP
+            var isValidAtom = true;
             for (window) |char| {
-                if (isValidAtomChar(char)) continue;
-                validAtomCharacters = false;
-                break;
+                if (std.ascii.isAlphanumeric(char) or char == '_' or char == '.')
+                    continue;
+                isValidAtom = false;
             }
 
-            // If we are not a valid variable, we want to scale the window back
+            // If we are not a valid label, we want to scale the window back
             // and say that the variable is done
-            if (!validAtomCharacters) {
+            if (!isValidAtom) {
                 window = 
                     self.textRef[self.index..self.index + currentWindowBuffer.len - 1];
-                break;
+                var atomToken = TokenType { .Label = window };
+
+                // Number Literal Special Case
+                var isValidNumberLiteral = true;
+                for (window) |char| {
+                    if (std.ascii.isDigit(char) or char == '.') continue;
+                    isValidNumberLiteral = false;
+                }
+                if (isValidNumberLiteral) {
+                    const num = try std.fmt.parseFloat(f64, window);
+                    atomToken = TokenType {.NumberLiteral = num};
+                }
+
+                // Boolean Literal Special Case
+                if (std.mem.eql(u8, "false", window))
+                    atomToken = TokenType {.BoolLiteral = false};
+                if (std.mem.eql(u8, "true", window))
+                    atomToken = TokenType {.BoolLiteral = true};
+
+                // Null & Undefined
+                if (std.mem.eql(u8, "undefined", window))
+                    atomToken = .Null;
+                if (std.mem.eql(u8, "null", window))
+                    atomToken = .Null;
+
+                if (window.len == 0) return error.NotAAtomToken;
+                self.advance(window.len);
+                return atomToken;
             }
         }
-        if (window.len == 0) return error.NotAAtomToken;
-        self.advance(window.len);
-        return TokenType { .Label = window };
     }
     pub fn getOneHitToken(self: *Self) !TokenType {
         var buffer: [1024 * 4]u8 = undefined;
@@ -325,7 +348,8 @@ pub const Tokenizer = struct {
             if (!isAKeyword) continue;
             if (self.peekChar(testKeyword.len)) |continuationChar| {
                 const lastChar = testKeyword[testKeyword.len - 1];
-                if (isValidAtomChar(lastChar) and isValidAtomChar(continuationChar)) 
+                if (std.ascii.isAlphanumeric(lastChar) 
+                    and std.ascii.isAlphanumeric(continuationChar)) 
                     return error.NotAOneHitToken;
             }
 

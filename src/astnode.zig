@@ -5,6 +5,7 @@ pub const JSValueType = union(enum) {
     JSNumber: f64,
     JSBoolean: bool,
     JSString: []const u8,
+    JSNull,
 
     pub fn printRepr(self: @This()) void {
         switch (self) {
@@ -16,6 +17,9 @@ pub const JSValueType = union(enum) {
             },
             .JSString => |string| {
                 std.debug.print("JSValueType(\"{s}\")\n", .{string});
+            },
+            .JSNull => {
+                std.debug.print("JSValueType(NULL)", .{});
             }
         }
     }
@@ -32,7 +36,6 @@ pub const ASTExpression = union(enum) {
     Operation: ASTFunctionCall,
 
     const Self = @This();
-
     const levelDepth = 4; 
 
     pub fn printSubTree(self: Self, padlevel: usize) void {
