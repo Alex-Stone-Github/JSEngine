@@ -246,8 +246,15 @@ pub const Tokenizer = struct {
         else |err| {
             if (err != error.NotAStringToken) return err;
         }
-
-        // 3. Test for keywords and symbols
+        // 3. Test if string literal 
+        if (self.getNumberLiteral()) |numbertok| {
+            return Token {.token = numbertok, 
+                .start = tokenStartIndex, .end = self.index};
+        }
+        else |err| {
+            if (err != error.NotANumberToken) return err;
+        }
+        // 4. Test for keywords and symbols
         if (self.getOneHitToken()) |onehit| {
             return Token {.token = onehit, 
                 .start = tokenStartIndex, .end = self.index};
@@ -255,18 +262,17 @@ pub const Tokenizer = struct {
         else |err| {
             if (err != error.NotAOneHitToken) return err;
         }
-
-        // 4. Classify Label 
-        if (self.getAtomToken()) |atom| {
-            return Token {.token = atom, 
+        // 5. Classify Label 
+        if (self.getLabelToken()) |label| {
+            return Token {.token = label, 
                 .start = tokenStartIndex, .end = self.index};
         }
         else |err| {
-            if (err != error.NotAAtomToken) return err;
+            if (err != error.NotALabelToken) return err;
         }
         return error.InvalidSyntax;
     }
-    pub fn getAtomToken(self: *Self) !TokenType {
+    pub fn getNumberLiteral(self: *Self) !TokenType {
         // How long can a variable or number actually be
         var fullWindowBuffer: [128]u8 = undefined;
         var currentWindowBuffer: []u8 = &fullWindowBuffer;
@@ -282,30 +288,60 @@ pub const Tokenizer = struct {
 
             // Are we still a valid label
             // TODO: REVIEW DOUBLE LOOP
-            var isValidAtom = true;
+            var isValidNumber = true;
             for (window) |char| {
-                if (std.ascii.isAlphanumeric(char) or char == '_' or char == '.')
+                if (std.ascii.isDigit(char) or char == '.')
                     continue;
-                isValidAtom = false;
+                isValidNumber = false;
+            }
+
+            if (!isValidNumber) {
+                window = 
+                    self.textRef[self.index..self.index + currentWindowBuffer.len - 1];
+                if (window.len == 0) return error.NotANumberToken;
+                if (window.len == 1 and window[0] == '.')
+                    return error.NotANumberToken;
+
+                std.debug.print("{s}\n", .{window});
+                const number = try std.fmt.parseFloat(f64, window);
+                const numberToken = 
+                    TokenType { .NumberLiteral = number };
+
+                self.advance(window.len);
+                return numberToken;
+            }
+        }
+    }
+
+    pub fn getLabelToken(self: *Self) !TokenType {
+        // How long can a variable or number actually be
+        var fullWindowBuffer: [128]u8 = undefined;
+        var currentWindowBuffer: []u8 = &fullWindowBuffer;
+        currentWindowBuffer.len = 0;
+
+        var window = self.peekStr(currentWindowBuffer) orelse unreachable;
+
+        while (true) {
+            // Expand the window and check
+            currentWindowBuffer.len += 1;
+            if (currentWindowBuffer.len == fullWindowBuffer.len) return error.AtomTooBig;
+            window = self.peekStr(currentWindowBuffer) orelse return error.EndOfStream;
+
+            // Are we still a valid label
+            // TODO: REVIEW DOUBLE LOOP
+            var isValidLabel = true;
+            for (window) |char| {
+                if (std.ascii.isAlphanumeric(char) or char == '_')
+                    continue;
+                isValidLabel = false;
             }
 
             // If we are not a valid label, we want to scale the window back
             // and say that the variable is done
-            if (!isValidAtom) {
+            if (!isValidLabel) {
                 window = 
                     self.textRef[self.index..self.index + currentWindowBuffer.len - 1];
                 var atomToken = TokenType { .Label = window };
-
-                // Number Literal Special Case
-                var isValidNumberLiteral = true;
-                for (window) |char| {
-                    if (std.ascii.isDigit(char) or char == '.') continue;
-                    isValidNumberLiteral = false;
-                }
-                if (isValidNumberLiteral) {
-                    const num = try std.fmt.parseFloat(f64, window);
-                    atomToken = TokenType {.NumberLiteral = num};
-                }
 
                 // Boolean Literal Special Case
                 if (std.mem.eql(u8, "false", window))
@@ -319,7 +355,7 @@ pub const Tokenizer = struct {
                 if (std.mem.eql(u8, "null", window))
                     atomToken = .Null;
 
-                if (window.len == 0) return error.NotAAtomToken;
+                if (window.len == 0) return error.NotALabelToken;
                 self.advance(window.len);
                 return atomToken;
             }

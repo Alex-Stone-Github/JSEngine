@@ -12,7 +12,9 @@
  * the more you know
  */
 
-3.3 + the * whatever + (4 - 2);
+(3.4) * (2 + thething_) - whatever;
+
+-3.3 + the * whatever + 4 - 2;
 
 false;
 
@@ -24,6 +26,10 @@ false;
 
 // dumb interupt ing commen
 // laksjdf
+
+(32 + 34) - someCool_[33].what / 2;
+
+outer.inner + outer[inner + 1] * 2;
 
 34 * (5 + 2) + Math.random(sixtynine /*69*/, "69");
 

@@ -7,8 +7,28 @@ pub const JSValueType = union(enum) {
     JSString: []const u8,
     JSNull,
 
-    pub fn printRepr(self: @This()) void {
-        switch (self) {
+    const Self = @This();
+
+    pub fn deinit(self: *Self, alloc: std.mem.Allocator) void {
+        switch (self.*) {
+            .JSString => |str| alloc.free(str),
+            else => {},
+        }
+    }
+
+    pub fn clone(self: *const Self, alloc: std.mem.Allocator) !Self {
+        switch (self.*) {
+            .JSString => |str| {
+                return JSValueType {
+                    .JSString = try alloc.dupe(u8, str)
+                };
+            },
+            else => return self.*,
+        }
+    }
+
+    pub fn printRepr(self: *const Self) void {
+        switch (self.*) {
             .JSNumber => |number| {
                 std.debug.print("JSValueType({})\n", .{number});
             },
@@ -25,46 +45,116 @@ pub const JSValueType = union(enum) {
     }
 };
 
-pub const ASTFunctionCall = struct {
-    name: []const u8,
-    arguments: std.ArrayList(ASTExpression),
+pub const ASTOperation = struct {
+    arguments: []ASTExpression,
+    primitive: ASTOperationPrimitive,
+
+    const Self = @This();
+
+    const CloneError = error { OutOfMemory };
+    pub fn clone(self: *const Self, alloc: std.mem.Allocator) CloneError!Self {
+        var newSelf: Self = undefined;
+        newSelf.arguments = try alloc.dupe(ASTExpression, self.arguments);
+        for (0..self.arguments.len) |i| {
+            newSelf.arguments[i] = try self.arguments[i].clone(alloc);
+        }
+        newSelf.primitive = self.primitive;
+        return newSelf;
+    }
+
+    pub fn deinit(self: *Self, alloc: std.mem.Allocator) void {
+        for (self.arguments) |*argument| {
+            argument.deinit(alloc);
+        }
+        alloc.free(self.arguments);
+    }
+};
+pub const ASTOperationPrimitive = enum {
+    Add,
+    Sub,
+    Mul,
+    Div,
+
+    DoubleEql,
+    TripleEql,
+    NEq,
+    Lt,
+    Gt,
+    LtEql,
+    GtEql,
+
+    And,
+    Or,
+
+    BitAnd,
+    BitOr,
+    BitXor,
+
+    Negate,
+    Not,
+
+    FunctionCall,
+    IndexLabel,
+    IndexBrace,
+    Eof,
 };
 
 pub const ASTExpression = union(enum) {
-    Literal: JSValueType,
+    Value: JSValueType,
     Label: []const u8,
-    Operation: ASTFunctionCall,
+    Operation: ASTOperation,
 
     const Self = @This();
     const levelDepth = 4; 
 
-    pub fn printSubTree(self: Self, padlevel: usize) void {
-        switch (self) {
-            .Literal => |lit| {
-                lit.printRepr();
+    pub fn clone(self: *const Self, alloc: std.mem.Allocator) !Self {
+        switch (self.*) {
+            .Value => |val| {
+                return Self {
+                    .Value = try val.clone(alloc),
+                };
+            },
+            .Operation => |op| {
+                return Self {
+                    .Operation = try op.clone(alloc),
+                };
+            },
+            .Label => |label| {
+                return Self{
+                    .Label = 
+                        try alloc.dupe(u8, label) 
+                };
+            },
+        }
+    }
+
+    pub fn printSubTree(self: *const Self, padlevel: usize) void {
+        switch (self.*) {
+            .Value => |val| {
+                val.printRepr();
             },
             .Label => |label| {
                 std.debug.print("ASTLabel({s})\n", .{label});
             },
             .Operation => |op| {
-                std.debug.print("ASTOperation({s}):\n", .{op.name});
-                for (op.arguments.items) |argument| {
+                std.debug.print("ASTOperation({s}):\n", .{@tagName(op.primitive)});
+                for (op.arguments) |argument| {
                     for (0..padlevel+levelDepth) |_| std.debug.print(" ", .{});
                     argument.printSubTree(padlevel + levelDepth);
                 }
             },
         }
     }
-    pub fn deinit(self: Self, alloc: std.mem.Allocator) void {
-        switch (self) {
+    pub fn deinit(self: *Self, alloc: std.mem.Allocator) void {
+        switch (self.*) {
             .Operation => |op| {
-                for (op.arguments.items) |argument| {
+                for (op.arguments) |*argument| {
                     argument.deinit(alloc);
                 }
-                var argumentMut = op.arguments;
-                argumentMut.deinit(alloc);
+                alloc.free(op.arguments);
             },
-            else => {},
+            .Value => |*val| val.deinit(alloc),
+            .Label => |label| alloc.free(label),
         }
     }
 };

@@ -39,7 +39,7 @@ pub fn main() !void {
     std.debug.print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$\n", .{});
     std.debug.print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$\n", .{});
 
-    var parser = parse.Parser.init(chunkTree[1].Block.items, alloc);
-    try parser.parse();
+    var parser = parse.ASTGenerator.init(chunkTree[1].Block.items, alloc);
+    try parser.generate();
 }
 
