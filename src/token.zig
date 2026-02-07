@@ -76,6 +76,11 @@ pub const TokenType = union(enum) {
     Eql,
     DEql,
     TEql,
+    NEql,
+    Lt,
+    Gt,
+    LtEql,
+    GtEql,
 
     And,
     Or,
@@ -166,6 +171,12 @@ const oneHits = std.StaticStringMap(TokenType).initComptime(.{
     .{ "=", .Eql},
     .{ "==", .DEql},
     .{ "===", .TEql},
+    .{ "!=", .NEql},
+    .{ "<", .Lt},
+    .{ ">", .Gt},
+    .{ "<=", .LtEql},
+    .{ ">=", .GtEql},
+
 
 
     .{ "&&", .And},

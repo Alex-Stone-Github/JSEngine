@@ -75,9 +75,8 @@ pub const ASTOperationPrimitive = enum {
     Mul,
     Div,
 
-    DoubleEql,
-    TripleEql,
-    NEq,
+    Eql,
+    NEql,
     Lt,
     Gt,
     LtEql,
@@ -90,9 +89,11 @@ pub const ASTOperationPrimitive = enum {
     BitOr,
     BitXor,
 
+    // Unary
     Negate,
     Not,
 
+    // Special
     FunctionCall,
     IndexLabel,
     IndexBrace,

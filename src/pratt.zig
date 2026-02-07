@@ -116,7 +116,7 @@ pub const ExpressionParser = struct {
         var leftNode = try self.consumeNullDescriptor();
 
         // Continue to add to the treee
-        while (rbp  <= (try self.peekOperator()).precedence) {
+        while (rbp  < (try self.peekOperator()).precedence) {
             // Get the operator
             const operatorInfo = try self.peekOperator();
 
@@ -124,6 +124,7 @@ pub const ExpressionParser = struct {
             if (operatorInfo.primitive == .Eof) {
                 return leftNode;
             }
+            self.peekToken().?.printSubTree(0);
             self.advance();
 
             const rightNode = try switch(operatorInfo.primitive) {
@@ -169,12 +170,16 @@ pub const ExpressionParser = struct {
         };
         const tok = tokenInfo.token;
 
+        // Special Operators
         if (tok == .RParen) return eofInfo;
         if (tok == .RBrace) return eofInfo;
         if (tok == .RBracket) return eofInfo;
 
+
+
         if (self.precedence.get(tok)) |opInfo| 
             return opInfo;
+        tok.printRepr();
         return error.ExpectedBinaryOperator;
     }
     pub fn peekToken(self: *const Self) ?PratNode {
@@ -185,19 +190,36 @@ pub const ExpressionParser = struct {
         self.index += 1;
     }
 
+    fn precEntry(self: *Self, k: token.TokenType.Tag, 
+        primitive: astnode.ASTOperationPrimitive, prec: u32) !void {
+        try self.precedence.put(k, 
+            OperatorInfo{.precedence = prec,
+                .primitive = primitive});
+    }
     fn initPrecedenceTable(self: *Self) !void {
-        try self.precedence.put(.Plus, 
-            OperatorInfo{.precedence = 20, .primitive = .Add });
-        try self.precedence.put(.Minus, 
-            OperatorInfo{.precedence = 20, .primitive = .Sub });
-        try self.precedence.put(.Star, 
-            OperatorInfo{.precedence = 40, .primitive = .Mul });
-        try self.precedence.put(.Slash, 
-            OperatorInfo{.precedence = 40, .primitive = .Div });
-        try self.precedence.put(.Dot, 
-            OperatorInfo{.precedence = 140, .primitive = .IndexLabel });
-        try self.precedence.put(.LBrace, 
-            OperatorInfo{.precedence = 140, .primitive = .IndexBrace });
+        try self.precEntry(.Plus, .Add, 30);
+        try self.precEntry(.Minus, .Sub, 30);
+        try self.precEntry(.Star, .Mul, 40);
+        try self.precEntry(.Slash, .Div, 40);
+
+        try self.precEntry(.DEql, .Eql, 10);
+        try self.precEntry(.TEql, .Eql, 10);
+        try self.precEntry(.NEql, .NEql, 10);
+        try self.precEntry(.Lt, .Lt, 10);
+        try self.precEntry(.Gt, .Gt, 10);
+        try self.precEntry(.LtEql, .LtEql, 10);
+        try self.precEntry(.GtEql, .GtEql, 10);
+
+        try self.precEntry(.And, .And, 20);
+        try self.precEntry(.Or, .Or, 20);
+
+        try self.precEntry(.BitAnd, .BitAnd, 20);
+        try self.precEntry(.BitOr, .BitOr, 20);
+        try self.precEntry(.BitXor, .BitXor, 20);
+
+        // Special cases
+        try self.precEntry(.Dot, .IndexLabel, 1000);
+        try self.precEntry(.LBrace, .IndexBrace, 1000);
     }
 
     pub fn init(nodes: []PratNode, alloc: std.mem.Allocator) !Self {

@@ -16,7 +16,7 @@
 
 -3.3 + the * whatever + 4 - 2;
 
-false;
+false <= "what" + (3 * 2);
 
 "strictest mode";
 
