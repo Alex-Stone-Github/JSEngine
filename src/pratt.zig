@@ -94,6 +94,7 @@ pub const ExpressionParser = struct {
                     // Skip the first and last parenthesis
                     self.advance();
                     const inner = try self.pratt(1);
+                    self.advance();
                     return inner;
                 },
                 else => return error.ExpectedUnaryOperator,
@@ -121,14 +122,15 @@ pub const ExpressionParser = struct {
 
             // What are we going to do with the operator
             if (operatorInfo.primitive == .Eof) {
-                self.advance();
                 return leftNode;
             }
             self.advance();
 
             const rightNode = try switch(operatorInfo.primitive) {
                 .IndexBrace => InnerBrace: {
-                    break :InnerBrace self.pratt(1);
+                    const inner = try self.pratt(1);
+                    self.advance(); // skip last ]
+                    break :InnerBrace inner;
                 },
                 .IndexLabel => Label: {
                     const label = try self.consumeNullDescriptor();
@@ -153,17 +155,6 @@ pub const ExpressionParser = struct {
         }
         return leftNode;
     }
-    pub fn isRClosingToken(self: *const Self) bool {
-        const node = self.peekToken() orelse return false;
-        const tok = switch (node) {
-            .Token => |t| t,
-            else => return false,
-        };
-        const tokenType = tok.token;
-        if (tokenType == .RBrace) return true;
-        if (tokenType == .RParen) return true;
-        return false;
-    }
     pub fn peekOperator(self: *const Self) !OperatorInfo {
         // Give me a token
         const eofInfo = OperatorInfo {
@@ -180,6 +171,7 @@ pub const ExpressionParser = struct {
 
         if (tok == .RParen) return eofInfo;
         if (tok == .RBrace) return eofInfo;
+        if (tok == .RBracket) return eofInfo;
 
         if (self.precedence.get(tok)) |opInfo| 
             return opInfo;
