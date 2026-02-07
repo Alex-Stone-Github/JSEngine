@@ -30,15 +30,18 @@ pub fn chunkify(alloc: std.mem.Allocator,
                             }}
                     };
                 }
-                return .{idx, pratt.PratNode {.Block = tokenList}};
+                return .{idx, pratt.PratNode 
+                    {.Block = tokenList}};
             },
             else => { // Normal token
-                try tokenList.append(alloc, pratt.PratNode { .Token = currentToken});
+                try tokenList.append(alloc, 
+                    pratt.PratNode { .Token = currentToken});
             }
         }
 
         if (idx == allTokens.len)
-            return .{idx, pratt.PratNode {.Block = tokenList}};
+            return .{idx, pratt.PratNode 
+                {.Block = tokenList}};
     }
 }
 
@@ -128,7 +131,7 @@ pub const ASTGenerator = struct {
         }
     }
     pub fn generate(self: *Self) !void {
-        for (0..7) |i| {
+        for (0..8) |i| {
             std.debug.print("--------\n", .{});
             std.debug.print("Unparsed Expression {}:\n", .{i});
             std.debug.print("--------\n", .{});
@@ -146,12 +149,16 @@ pub const ASTGenerator = struct {
                 var ast = try expressionParser.parse();
                 defer ast.deinit(self.alloc);
 
-                std.debug.print("--------\n", .{});
-                std.debug.print("Printing generated AST{}:\n", .{i});
-                std.debug.print("--------\n", .{});
+                std.debug.print("Printing generated AST{} ----\n", .{i});
                 ast.printSubTree(0);
             }
         }
     }
 };
 
+
+pub const Statement = union(enum) {
+    ExpressionStatement,
+    AssignmentStatement,
+
+};

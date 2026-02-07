@@ -110,6 +110,7 @@ pub const ExpressionParser = struct {
         ExpectedBinaryOperator,
         ExpectedUnaryOperator,
         ExpectedLabel,
+        EndOfStream,
     };
     pub fn pratt(self: *Self, rbp: u32) ExpressionError!astnode.ASTExpression {
         // Should handle nud prefix operations
@@ -124,7 +125,6 @@ pub const ExpressionParser = struct {
             if (operatorInfo.primitive == .Eof) {
                 return leftNode;
             }
-            self.peekToken().?.printSubTree(0);
             self.advance();
 
             const rightNode = try switch(operatorInfo.primitive) {
@@ -132,6 +132,33 @@ pub const ExpressionParser = struct {
                     const inner = try self.pratt(1);
                     self.advance(); // skip last ]
                     break :InnerBrace inner;
+                },
+                .FunctionCall => {
+                    var args: std.ArrayList(astnode.ASTExpression) = .empty;
+                    try args.append(self.alloc, leftNode);
+
+                    while (true) {
+                        const arg = try self.pratt(1);
+                        try args.append(self.alloc, arg);
+
+                        const ending = (self.peekToken() 
+                            orelse return error.EndOfStream)
+                            .Token.token;
+                        self.advance();
+                        if (ending == .Comma) {
+                            std.debug.print("I found me a comma dun dun dun\n", .{});
+                        }
+                        if (ending == .RParen) {
+                            const operation = astnode.ASTExpression {
+                                .Operation = astnode.ASTOperation {
+                                    .primitive = .FunctionCall,
+                                    .arguments = 
+                                        try args.toOwnedSlice(self.alloc),
+                                },
+                            };
+                            return operation;
+                        }
+                    }
                 },
                 .IndexLabel => Label: {
                     const label = try self.consumeNullDescriptor();
@@ -174,12 +201,12 @@ pub const ExpressionParser = struct {
         if (tok == .RParen) return eofInfo;
         if (tok == .RBrace) return eofInfo;
         if (tok == .RBracket) return eofInfo;
+        if (tok == .Comma) return eofInfo;
 
 
 
         if (self.precedence.get(tok)) |opInfo| 
             return opInfo;
-        tok.printRepr();
         return error.ExpectedBinaryOperator;
     }
     pub fn peekToken(self: *const Self) ?PratNode {
@@ -220,6 +247,7 @@ pub const ExpressionParser = struct {
         // Special cases
         try self.precEntry(.Dot, .IndexLabel, 1000);
         try self.precEntry(.LBrace, .IndexBrace, 1000);
+        try self.precEntry(.LParen, .FunctionCall, 1000);
     }
 
     pub fn init(nodes: []PratNode, alloc: std.mem.Allocator) !Self {
