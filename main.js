@@ -33,17 +33,37 @@ outer.inner + outer[inner + 1] * 2;
 
 34 * (5 + 2) + Math.random(sixtynine /*69*/, "69") + 2;
 
+someFunc() * 2 + [2, 3, 45, what.the] + 3;
+
+// recursive function demonstraction
+Date.now([1, "a", '23', a()], inner());
+
+{
+	finalish: Boss,
+	"string": 7.7,
+	2: "string",
+};
+
 const hi = Math.random();
 const three3hi = 3 * (Math.random() + 1);
 
 let other_Var =  "Some Interesting Sasldfkj ()dl kjasldfkj []";
 const what = true;
 
+function someFunction() {}
+
+if (true == 3) {
+	// do something interesting
+}
+
 while (false) {}
 
 var wackString = 'one line strinasdf " ';
 
-function someFunction() {}
+
+const something = function() {
+	// random didid do da
+};
 
 
 function otherFunction(alpha, bravo, charlie) {

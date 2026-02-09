@@ -36,6 +36,7 @@ pub const PratNode = union(enum) {
                 for (0..padlevel) |_| std.debug.print(" ", .{});
                 std.debug.print("UToken.", .{});
                 t.printRepr();
+                std.debug.print("\n", .{});
             },
             .Mini => |mini| {
                 mini.printSubTree(padlevel + levelDepth);
@@ -74,7 +75,11 @@ pub const ExpressionParser = struct {
                 const value = try mini.clone(self.alloc);
                 break :Value value;
             },
-            .Token => |tok| 
+            .Block =>  |blk| ObjectLiteral: {
+                const objLiteral = try self.parseBlockAsObject(&blk);
+                break :ObjectLiteral objLiteral;
+            },
+            .Token => |tok|
             switch (tok.token) {
                 .Minus => {
                     self.advance();
@@ -97,9 +102,38 @@ pub const ExpressionParser = struct {
                     self.advance();
                     return inner;
                 },
+                .LBrace => {
+                    // Skip the LBracket
+                    self.advance();
+                    var elements: std.ArrayList(astnode.ASTExpression) = .empty;
+
+                    while (true) {
+                        const node = self.peekToken()
+                            orelse return error.EndOfStream;
+                        switch (node) {
+                            .Token => |toke| {
+                                if (toke.token == .Comma) {
+                                    self.advance();
+                                }
+                                if (toke.token == .RBrace) {
+                                    self.advance();
+                                    return astnode.ASTExpression {
+                                        .Operation = astnode.ASTOperation {
+                                            .primitive = .ArrayLiteral,
+                                            .arguments = 
+                                                try elements.toOwnedSlice(self.alloc),
+                                        },
+                                    };
+                                }
+                            },
+                            else => {},
+                        }
+                        const element = try self.pratt(1);
+                        try elements.append(self.alloc, element);
+                    }
+                },
                 else => return error.ExpectedUnaryOperator,
             },
-            else => return error.InvalidSyntax,
         };
         self.advance();
         return expr;
@@ -112,6 +146,34 @@ pub const ExpressionParser = struct {
         ExpectedLabel,
         EndOfStream,
     };
+    pub fn isEof(self: *const Self) bool {
+        return self.index >= self.nodes.len;
+    }
+    pub fn parseBlockAsObject(self: *Self, 
+        blk: *const std.ArrayList(PratNode)) !astnode.ASTExpression {
+        // Create a subparser to parse the block
+        var subParser = 
+            try Self.init(blk.items, self.alloc);
+        defer subParser.deinit();
+
+
+        var keyvalues: std.ArrayList(astnode.ASTExpression) = .empty;
+
+        while (true) {
+            if (subParser.isEof()) break;
+
+            const keyvalue = try subParser.parse();
+            try keyvalues.append(self.alloc, keyvalue);
+            subParser.advance();
+        }
+
+        return astnode.ASTExpression {
+            .Operation = .{
+                .primitive = .ObjectLiteral,
+                .arguments = try keyvalues.toOwnedSlice(self.alloc),
+            }
+        };
+    }
     pub fn pratt(self: *Self, rbp: u32) ExpressionError!astnode.ASTExpression {
         // Should handle nud prefix operations
         var leftNode = try self.consumeNullDescriptor();
@@ -133,31 +195,32 @@ pub const ExpressionParser = struct {
                     self.advance(); // skip last ]
                     break :InnerBrace inner;
                 },
-                .FunctionCall => {
+                .FunctionCall => FunctionCall: {
                     var args: std.ArrayList(astnode.ASTExpression) = .empty;
-                    try args.append(self.alloc, leftNode);
-
                     while (true) {
+                        const ending = (self.peekToken() 
+                            orelse return error.EndOfStream);
+
+                        switch (ending) {
+                            .Token => |t| {
+                                const endingToken = t.token;
+                                if (endingToken == .Comma)
+                                    self.advance();
+                                if (endingToken == .RParen) {
+                                    self.advance();
+                                    break :FunctionCall astnode.ASTExpression {
+                                        .Operation = astnode.ASTOperation {
+                                            .primitive = .ArrayLiteral,
+                                            .arguments = 
+                                                try args.toOwnedSlice(self.alloc),
+                                        },
+                                    };
+                                }
+                            },
+                            else => {},
+                        }
                         const arg = try self.pratt(1);
                         try args.append(self.alloc, arg);
-
-                        const ending = (self.peekToken() 
-                            orelse return error.EndOfStream)
-                            .Token.token;
-                        self.advance();
-                        if (ending == .Comma) {
-                            std.debug.print("I found me a comma dun dun dun\n", .{});
-                        }
-                        if (ending == .RParen) {
-                            const operation = astnode.ASTExpression {
-                                .Operation = astnode.ASTOperation {
-                                    .primitive = .FunctionCall,
-                                    .arguments = 
-                                        try args.toOwnedSlice(self.alloc),
-                                },
-                            };
-                            return operation;
-                        }
                     }
                 },
                 .IndexLabel => Label: {
@@ -202,6 +265,7 @@ pub const ExpressionParser = struct {
         if (tok == .RBrace) return eofInfo;
         if (tok == .RBracket) return eofInfo;
         if (tok == .Comma) return eofInfo;
+        if (tok == .Colon) return eofInfo;
 
 
 

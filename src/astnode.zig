@@ -1,17 +1,92 @@
 const std = @import("std");
 const token = @import("token.zig");
 
+pub const JSValueTypeHashContext = struct {
+    pub fn hash(self: @This(), tohash: JSValueType) u64 {
+        var h = std.hash.Wyhash.init(0);
+        const enumInt = @intFromEnum(tohash);
+        h.update(std.mem.asBytes(&enumInt));
+
+        switch (tohash) {
+            .JSNumber => |num| {
+                h.update(std.mem.asBytes(&num));
+            },
+            .JSBoolean => |boolean| {
+                h.update(std.mem.asBytes(&boolean));
+            },
+            .JSString => |string| {
+                h.update(string);
+            },
+            .JSArray => |arr| {
+                for (arr.items) |element| {
+                    const elementHash = self.hash(element);
+                    h.update(std.mem.asBytes(&elementHash));
+
+                }
+            },
+            .JSObject => |obj| {
+                var iter = obj.iterator();
+                while (iter.next()) |entry| {
+                    const keyHash = self.hash(entry.key_ptr.*);
+                    h.update(std.mem.asBytes(&keyHash));
+                    const valueHash = self.hash(entry.value_ptr.*);
+                    h.update(std.mem.asBytes(&valueHash));
+                }
+            },
+            .JSFunction => {},
+            .JSNull => {},
+        }
+        return h.final();
+    }
+    pub fn eql(self: @This(), a: JSValueType, b: JSValueType) bool {
+        // Check if they are of different varieties, otherwise should be same hash
+        if (@intFromEnum(a) != @intFromEnum(b))
+            return false;
+        return self.hash(a) == self.hash(b);
+    }
+};
+test "basic hash check" {
+    const a = JSValueType {
+        .JSNumber = 3,
+    };
+    const b = JSValueType {
+        .JSNumber = 4,
+    };
+    const hasher = JSValueTypeHashContext {};
+    std.debug.assert(!hasher.eql(a, b));
+}
+
 pub const JSValueType = union(enum) {
     JSNumber: f64,
     JSBoolean: bool,
     JSString: []const u8,
     JSNull,
 
+    JSArray: std.ArrayList(JSValueType),
+    JSObject: JSOBjectType,
+    JSFunction,
+
+    const JSOBjectType = std.HashMap(JSValueType, JSValueType, JSValueTypeHashContext, 80);
+
+
     const Self = @This();
 
     pub fn deinit(self: *Self, alloc: std.mem.Allocator) void {
         switch (self.*) {
             .JSString => |str| alloc.free(str),
+            .JSArray => |*arr| {
+                for (arr.items) |*element|
+                    element.deinit(alloc);
+                arr.deinit(alloc);
+            },
+            .JSObject => |*obj| {
+                var iter = obj.iterator();
+                while (iter.next()) |*entry| {
+                    entry.key_ptr.deinit(alloc);
+                    entry.value_ptr.deinit(alloc);
+                }
+                obj.deinit();
+            },
             else => {},
         }
     }
@@ -23,6 +98,28 @@ pub const JSValueType = union(enum) {
                     .JSString = try alloc.dupe(u8, str)
                 };
             },
+            .JSArray => |arr| {
+                var newList = 
+                    try std.ArrayList(JSValueType).initCapacity(alloc, arr.items.len);
+                for (arr.items) |element| {
+                    try newList.append(alloc, try element.clone(alloc));
+                }
+                return JSValueType {
+                    .JSArray = newList,
+                };
+            },
+            .JSObject => |obj| {
+                var newObj: JSOBjectType= JSOBjectType.init(alloc);
+                var iter = obj.iterator();
+                while (iter.next()) |*entry| {
+                    const newKey = try entry.key_ptr.clone(alloc);
+                    const newValue = try entry.value_ptr.clone(alloc);
+                    try newObj.put(newKey, newValue);
+                }
+                return JSValueType {
+                    .JSObject = newObj
+                };
+            },
             else => return self.*,
         }
     }
@@ -30,17 +127,26 @@ pub const JSValueType = union(enum) {
     pub fn printRepr(self: *const Self) void {
         switch (self.*) {
             .JSNumber => |number| {
-                std.debug.print("JSValueType({})\n", .{number});
+                std.debug.print("JSNumber({})", .{number});
             },
             .JSBoolean => |boolean| {
-                std.debug.print("JSValueType({})\n", .{boolean});
+                std.debug.print("JSBoolean({})", .{boolean});
             },
             .JSString => |string| {
-                std.debug.print("JSValueType(\"{s}\")\n", .{string});
+                std.debug.print("JSString(\"{s}\")", .{string});
             },
             .JSNull => {
-                std.debug.print("JSValueType(NULL)", .{});
-            }
+                std.debug.print("JSNull(NULL)", .{});
+            },
+            .JSObject => {
+                std.debug.print("JSObjectType(NULL)", .{});
+            },
+            .JSArray => {
+                std.debug.print("JSArrayType(NULL)", .{});
+            },
+            .JSFunction => {
+                std.debug.print("JSFunctionType(NULL)", .{});
+            },
         }
     }
 };
@@ -94,9 +200,13 @@ pub const ASTOperationPrimitive = enum {
     Not,
 
     // Special
+    ArrayLiteral,
+    ObjectLiteral,
     FunctionCall,
+
     IndexLabel,
     IndexBrace,
+
     Eof,
 };
 
@@ -133,6 +243,7 @@ pub const ASTExpression = union(enum) {
         switch (self.*) {
             .Value => |val| {
                 val.printRepr();
+                std.debug.print("\n", .{});
             },
             .Label => |label| {
                 std.debug.print("ASTLabel({s})\n", .{label});

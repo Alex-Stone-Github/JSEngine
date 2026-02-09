@@ -63,6 +63,11 @@ pub const ASTGenerator = struct {
 
     pub fn transformStep(chnk: *pratt.PratNode) void {
         switch (chnk.*) {
+            .Block => |blk| {
+                for (blk.items) |*node| {
+                    transformStep(node);
+                }
+            },
             .Token => |utoken| {
                 switch (utoken.token) {
                     .Label => |newLabelName| {
@@ -122,16 +127,23 @@ pub const ASTGenerator = struct {
         unparsedStatement.len = 0;
 
         while (true) {
-            const chnk = self.allChunks[self.index+unparsedStatement.len];
-            if (chnk.Token.token == .SemiColon) {
-                self.index += unparsedStatement.len + 1;
-                return unparsedStatement;
+            const node = self.allChunks[self.index+unparsedStatement.len];
+            switch (node) {
+                .Token => |tok| {
+                    if (tok.token == .SemiColon) {
+                        self.index += unparsedStatement.len + 1;
+                        return unparsedStatement;
+                    }
+                    unparsedStatement.len += 1;
+                },
+                else => {
+                    unparsedStatement.len += 1;
+                },
             }
-            unparsedStatement.len += 1;
         }
     }
     pub fn generate(self: *Self) !void {
-        for (0..8) |i| {
+        for (0..11) |i| {
             std.debug.print("--------\n", .{});
             std.debug.print("Unparsed Expression {}:\n", .{i});
             std.debug.print("--------\n", .{});
@@ -159,6 +171,19 @@ pub const ASTGenerator = struct {
 
 pub const Statement = union(enum) {
     ExpressionStatement,
+    FuncExprStatement,
+    ClassExprStatement,
+
     AssignmentStatement,
 
+    BranchStatement, // / switch statemetn
+    LoopStatement, // / For , While
+    TryCatchStatement, // ERror Propagation
+    BreakStatement,
+    ReturnStatement,
 };
+
+// - JSARRAYVALUE
+// - JSOBJECT
+// - function and class parsing
+// - WHAT IS A REFCOUNTED VARIABLE

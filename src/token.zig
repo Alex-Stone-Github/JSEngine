@@ -56,6 +56,7 @@ pub const TokenType = union(enum) {
     LParen,
     RParen,
     Comma,
+    Colon,
     Dot,
     SemiColon,
 
@@ -99,9 +100,9 @@ pub const TokenType = union(enum) {
 
     pub fn printRepr(self: @This()) void {
         switch (self) {
-            .StringLiteral => |string| std.debug.print("\"{s}\"\n", .{string}),
-            .Label => |label| std.debug.print("Label({s})\n", .{label}),
-            else => std.debug.print("{s}\n", .{@tagName(self)}),
+            .StringLiteral => |string| std.debug.print("\"{s}\"", .{string}),
+            .Label => |label| std.debug.print("Label({s})", .{label}),
+            else => std.debug.print("{s}", .{@tagName(self)}),
         }
     }
 };
@@ -150,6 +151,7 @@ const oneHits = std.StaticStringMap(TokenType).initComptime(.{
     .{ "(", .LParen},
     .{ ")", .RParen},
     .{ ",", .Comma},
+    .{ ":", .Colon},
     .{ ".", .Dot},
     .{ ";", .SemiColon},
 
