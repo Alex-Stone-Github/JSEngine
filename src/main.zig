@@ -1,6 +1,7 @@
 const std = @import("std");
 const token = @import("token.zig");
 const parse = @import("parse.zig");
+const transform = @import("transform.zig");
 
 pub fn main() !void {
     // Gimmi an Allocator
@@ -29,7 +30,7 @@ pub fn main() !void {
 
     // Chunkify it
     var chunkTree = 
-        try parse.chunkify(alloc, allTokens.items, 0);
+        try transform.chunkify(alloc, allTokens.items, 0);
     defer chunkTree[1].deinit(alloc);
 
 
@@ -39,7 +40,7 @@ pub fn main() !void {
     std.debug.print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$\n", .{});
     std.debug.print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$\n", .{});
 
-    var parser = parse.ASTGenerator.init(chunkTree[1].Block.items, alloc);
+    var parser = parse.ProgramParser.init(chunkTree[1].Block.items, alloc);
     try parser.generate();
 }
 

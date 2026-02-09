@@ -2,58 +2,17 @@ const std = @import("std");
 const astnode = @import("astnode.zig");
 const token = @import("token.zig");
 const pratt = @import("pratt.zig");
+const transform = @import("transform.zig");
+const pattern = @import("pattern.zig");
 
-pub fn chunkify(alloc: std.mem.Allocator, 
-    allTokens: []const token.Token,
-    start: usize) !struct{usize, pratt.PratNode} {
-    var idx = start;
-    var tokenList: std.ArrayList(pratt.PratNode) = .empty;
-
-    while (true) {
-        const currentToken = allTokens[idx];
-        idx += 1;
-
-        switch (currentToken.token) {
-            .LBracket => { // Form a subchunk
-                const nidx, const block = 
-                    try chunkify(alloc, allTokens, idx);
-                idx = nidx;
-                try tokenList.append(alloc, block);
-            },
-            .RBracket => { // End of the current chunk
-                if (tokenList.items.len == 0) {
-                    return .{idx, pratt.PratNode {
-                            .Token = token.Token{
-                                .start = currentToken.start, 
-                                .end = currentToken.end,
-                                .token = .SemiColon,
-                            }}
-                    };
-                }
-                return .{idx, pratt.PratNode 
-                    {.Block = tokenList}};
-            },
-            else => { // Normal token
-                try tokenList.append(alloc, 
-                    pratt.PratNode { .Token = currentToken});
-            }
-        }
-
-        if (idx == allTokens.len)
-            return .{idx, pratt.PratNode 
-                {.Block = tokenList}};
-    }
-}
-
-
-pub const ASTGenerator = struct {
-    allChunks: []pratt.PratNode,
+pub const ProgramParser = struct {
+    allChunks: []transform.PratNode,
     alloc: std.mem.Allocator,
     index: usize,
 
     const Self = @This();
 
-    pub fn init(chunks: []pratt.PratNode, alloc: std.mem.Allocator) Self {
+    pub fn init(chunks: []transform.PratNode, alloc: std.mem.Allocator) Self {
         return Self {
             .allChunks = chunks,
             .alloc = alloc,
@@ -61,69 +20,8 @@ pub const ASTGenerator = struct {
         };
     }
 
-    pub fn transformStep(chnk: *pratt.PratNode) void {
-        switch (chnk.*) {
-            .Block => |blk| {
-                for (blk.items) |*node| {
-                    transformStep(node);
-                }
-            },
-            .Token => |utoken| {
-                switch (utoken.token) {
-                    .Label => |newLabelName| {
-                        const miniTree = pratt.PratNode {
-                            .Mini = astnode.ASTExpression {
-                                .Label = newLabelName,
-                            }
-                        };
-                        chnk.* = miniTree;
-                    },
-                    .StringLiteral => |stringLiteral| {
-                        const miniTree = pratt.PratNode {
-                            .Mini = astnode.ASTExpression {
-                                .Value = astnode.JSValueType {
-                                    .JSString = stringLiteral,
-                                },
-                            }
-                        };
-                        chnk.* = miniTree;
-                    },
-                    .NumberLiteral => |numLiteral| {
-                        const miniTree = pratt.PratNode {
-                            .Mini = astnode.ASTExpression {
-                                .Value = astnode.JSValueType {
-                                    .JSNumber = numLiteral,
-                                },
-                            }
-                        };
-                        chnk.* = miniTree;
-                    },
-                    .BoolLiteral => |boolLiteral| {
-                        const miniTree = pratt.PratNode {
-                            .Mini = astnode.ASTExpression {
-                                .Value = astnode.JSValueType {
-                                    .JSBoolean = boolLiteral,
-                                },
-                            }
-                        };
-                        chnk.* = miniTree;
-                    },
-                    .Null => {
-                        const miniTree = pratt.PratNode {
-                            .Mini = astnode.ASTExpression {
-                                .Value = .JSNull
-                            }
-                        };
-                        chnk.* = miniTree;
-                    },
-                    else => {},
-                }
-            },
-            else => {},
-        }
-    }
-    pub fn getUnparsedStatement(self: *Self) []pratt.PratNode {
-        var unparsedStatement: []pratt.PratNode = self.allChunks[self.index..];
+    pub fn getUnparsedStatement(self: *Self) []transform.PratNode {
+        var unparsedStatement: []transform.PratNode = self.allChunks[self.index..];
         unparsedStatement.len = 0;
 
         while (true) {
@@ -149,7 +47,7 @@ pub const ASTGenerator = struct {
             std.debug.print("--------\n", .{});
             const unparsedStatement = self.getUnparsedStatement();
             for (unparsedStatement) |*chnk| {
-                transformStep(chnk);
+                transform.transformStep(chnk);
                 chnk.printSubTree(0);
             }
             // Why don't we just parse it like an expression right away
@@ -169,19 +67,6 @@ pub const ASTGenerator = struct {
 };
 
 
-pub const Statement = union(enum) {
-    ExpressionStatement,
-    FuncExprStatement,
-    ClassExprStatement,
-
-    AssignmentStatement,
-
-    BranchStatement, // / switch statemetn
-    LoopStatement, // / For , While
-    TryCatchStatement, // ERror Propagation
-    BreakStatement,
-    ReturnStatement,
-};
 
 // - JSARRAYVALUE
 // - JSOBJECT
